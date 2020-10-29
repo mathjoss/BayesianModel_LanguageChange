@@ -1,0 +1,8 @@
+In order to run the Rmarkdown file, extract the 3 differents datasets. 
+The 3 resulting CSV file are the following:
+
+| Input file | Format      | DV | IV | Number of replications | Maximum number of ticks |
+|------------|-------------|-------------|-------------| -------------| -------------|
+| `example_time.csv` | CSV file | language value (all nodes, biased nodes, control nodes) | scalefree, 500 nodes, SAM, 10% biased nodes, initial language | 100 | 1000 |
+| `analysis.csv` | CSV file | 1) language value (all nodes, biased nodes, control nodes)  2) stabilisation time (all nodes, biased nodes, control nodes) 3) spatial autocorrelation (K <= 1, K <= 2) 4) communities (mean and std of the language value + number of nodes in each community) |  set of combination **1** (see [Set of combination 1 - analysis.csv]) | 100 | 1000 |
+| `extra_analysis.csv` | CSV file | language value (all nodes) | set of combination **2** (see [Set of combination 2 - extra_analysis.csv]) | 50 | 500 |
