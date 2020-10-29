@@ -1,5 +1,5 @@
 In order to run the Rmarkdown file, extract the 3 differents datasets. 
-When extracted, merge analysis_part1 and analysis_part2 in a new .csv file and call it "analysis.csv".
+When extracted, merge analysis_part1, analysis_part2 and analysis_part3 in a new .csv file and call it "analysis.csv".
 
 The 3 resulting CSV file are the following:
 
