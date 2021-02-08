@@ -1,5 +1,8 @@
 In order to run the Rmarkdown file, extract the 3 differents datasets. 
-When extracted, merge analysis_part1, analysis_part2 and analysis_part3 in a new .csv file and call it "analysis.csv".
+When extracted, merge:
+ -  analysis_part1, analysis_part2 and analysis_part3 in a new .csv file and call it "analysis.csv".
+ -  extra_analysis_part1, extra_analysis_part2 in a new .csv file and call it "extra_analysis.csv".
+ -  synchr_versus_asynchr_part1, synchr_versus_asynchr_part2, synchr_versus_asynchr_part3, synchr_versus_asynchr_part4, synchr_versus_asynchr_part5 in a new .csv file and call it "synchr_versus_asynchr.csv".
 
 The 3 resulting CSV file are the following:
 
