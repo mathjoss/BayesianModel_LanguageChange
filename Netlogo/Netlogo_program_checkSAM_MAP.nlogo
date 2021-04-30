@@ -91,8 +91,8 @@ globals [
   list-degrees       ;; list of degrees of all nodes
   my-ratio-cen       ;; report ratio of biased nodes with high centrality
   my-con-prob        ;; report connection probability
-  list-values
-  mynumber
+  list-values        ;; report list of utterances produced by each agent: agent number - utterance value 
+  mynumber           ;; internal value
 ]
 
 to setup
@@ -1293,8 +1293,8 @@ end
 ;; for example, if the language value, alpha and beta of all nodes is not needed, comment the lines starting with set list-all-langval [], list-all-alpha, list-all-beta
 
 to go
-
-  set list-values []
+  ;; uncomment this if you want to record all utterances pronounced by the agents (you will also need to uncomment text below)
+  ;set list-values []
 
   ;; if rewire-friends>0, then dynamic network
   rewire-friends
@@ -1557,14 +1557,12 @@ to communicate-via [ algorithm ] ;; node procedure
     ;; hear (same bayesian algorithm for SAM and MAP)
     ask link-neighbors [ listen-bayesian [spoken-state] of myself ]
 
-    ;print(spoken-state)
-    ;print(who)
-
-    if (who = 1) [ set mynumber 101 ]
-    if (who = 0) [ set mynumber 102 ]
-    if (who != 0) and (who != 1) [ set mynumber who]
-    set list-values insert-item 0 list-values spoken-state
-    set list-values insert-item 0 list-values mynumber
+    ;; record the values of each utterances: uncomment this if you want to measure it
+    ;if (who = 1) [ set mynumber 101 ]
+    ;if (who = 0) [ set mynumber 102 ]
+    ;if (who != 0) and (who != 1) [ set mynumber who]
+    ;set list-values insert-item 0 list-values spoken-state
+    ;set list-values insert-item 0 list-values mynumber
 
 
     ;; value for control (not coded yet)
