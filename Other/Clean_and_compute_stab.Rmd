@@ -1,0 +1,330 @@
+---
+title: "Clean_and_compute_stab"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+
+library(tidyverse)
+library(data.table)
+library(tidyr)
+library(janitor)
+options(stringsAsFactors = FALSE)
+library(ggpubr)
+library(ggsignif)
+library(ggplot2)
+library(pracma) # used for function linspace
+```
+
+## Clean Netlogo files
+
+### Clean the main results files
+
+This part cleans the output from Netlogo. More specifically, it:
+
+ - erase the columns where the variables is fixed;
+ - rename the columns with more intuitive names;
+ - convert the output to numeric (when the calculations was impossible, it convert the Netlogo output to NA)
+ - write the new table by adding "_good" at the end of the file
+ 
+The goal of this step is to reduce the size of the file, which can be very big, and also make the reading of the file more intuitive.
+
+```{r cars}
+# read file and reduce
+pathfile <- "/home/mjosserand/Documents/Netlogo/WEEKEND/"
+namefile <- "scalefree_SAM_0influ_2"
+extension <- ".csv"
+
+is_there_spatial_autocorr <- "no"
+is_there_community_detec <- "no"
+is_there_alpha_beta <- "no"
+
+
+df <- fread(paste(pathfile, namefile, extension, sep=""), header=T, sep=",", fill=TRUE, skip=6, 
+            select = c("[run number]",  "percent-state-1", "update-algorithm", "learning-acceptance1", "num-nodes", "total-numb-utt", "percent-influent", "[step]", "mean-langval", "mean-langval-1", "mean-langval-0",  "communities-mean", "communities-std", "communities-nbnodes", "degrees")) 
+
+colnames(df) <- c("rep_id",  "prop_biased", "learners", "bias_strength", "size_net", "init_langval", "influencers_biased", "ticks", "langval_all", "langval_biased", "langval_control", "com_mean", "com_sd", "com_nbnodes", "degrees")
+
+
+
+#df$langval_all <- as.numeric(df$langval_all)
+df$langval_biased <- as.numeric(df$langval_biased)
+df$langval_control <- as.numeric(df$langval_control)
+
+write.table(df, paste(pathfile, namefile, "_good", extension, sep=""), col.names=TRUE, row.names=FALSE, quote=FALSE, sep=";")
+
+```
+
+
+### Clean the systematic bias effect study files
+
+This is doing exactly the same thing, except that here, we focus on the file extracted from the *systematic bias effect study*. It's the same, except that we have less columns of interest.
+
+```{r cars}
+# read file and reduce
+pathfile <- "/home/mjosserand/Documents/Netlogo/WEEKEND/"
+namefile <- "scalefree_SAM_0influ_2"
+extension <- ".csv"
+
+df <- fread(paste(pathfile, namefile, extension, sep=""), header=T, sep=",", fill=TRUE, skip=6, 
+            select = c("[run number]",  "percent-state-1", "learning-acceptance1", "percent-influent", "[step]", "mean-langval")) 
+
+colnames(df) <- c("rep_id",  "prop_biased", "bias_strength", "influencers_biased", "ticks", "langval_all")
+
+df$langval_all <- as.numeric(df$langval_all)
+
+write.table(df, paste(pathfile, namefile, "_good", extension, sep=""), col.names=TRUE, row.names=FALSE, quote=FALSE, sep=";")
+
+```
+
+
+## Compute Stabilization with the preferred method
+
+Now we will create a new file:
+
+ - with heterogeneity inter and intra group, but without the communities means, std and number of nodes
+ - not having the language value at every step, but only the language value at step 0, 1 and 1000
+ - including the stabilization time 
+ - merges the different network types together
+ 
+The goal here is to keep only the necessary information and reduce the file's size.
+
+
+
+```{r pressure, echo=FALSE}
+
+### -------- READ TABLE -------- ####
+
+# Read the file
+pathfile <- "/home/mjosserand/Documents/Netlogo/WEEKEND/"
+namefile <- "scalefree_SAM_0influ_2_good"
+extension <- ".csv"
+data <- fread(paste(pathfile, namefile, extension, sep=""), header=T, sep=";", quote='"', fill=TRUE)
+
+# Add a column with the network type automatically, based on the name of the file
+if ( grepl( "scalefree", namefile, fixed = TRUE) | grepl( "sf", namefile, fixed = TRUE) ) {
+  data$network <- "scalefree"
+} else if (grepl( "random", namefile, fixed = TRUE) | grepl( "ran", namefile, fixed = TRUE)) {
+  data$network <- "random"
+} else if (grepl( "smallworld", namefile, fixed = TRUE) | grepl( "sw", namefile, fixed = TRUE)) {
+  data$network <- "smallworld"
+} else {
+  data$network <- "not_found"
+} 
+
+# Convert to factors
+data$rep_id <- as.factor(data$rep_id)
+
+
+
+### -------- COMPUTE HETEROGENEITY -------- ####
+
+trim <- function (x) gsub("^\\s+|\\s+$", "", x)
+
+data_new <- data[data$ticks==0 | data$ticks==1 | data$ticks==5000,]
+
+# other faster
+data_new$com_mean <-  gsub("([.-])|[[:punct:]]", "\\1", data_new$com_mean)
+data_new$com_mean <- trim(data_new$com_mean) # remove white spaces at the end or beginning
+data_new$com_sd <-  gsub("([.-])|[[:punct:]]", "\\1", data_new$com_sd)
+data_new$com_sd <- trim(data_new$com_sd) # remove white spaces at the end or beginning
+
+for (el in 1:nrow(data_new)){
+  data_new$het_inter[el] <- sd(as.numeric(str_split(data_new$com_mean[el], " ")[[1]]))
+  data_new$het_intra[el] <- mean(as.numeric(str_split(data_new$com_sd[el], " ")[[1]]))
+}
+
+data_new$com_mean <- NULL
+data_new$com_sd <- NULL
+data_new$com_nbnodes <- NULL
+
+
+### -------- SUMMARIZE TABLE -------- ####
+
+data_new$ticks_new <- as.factor(data_new$ticks)
+data_wide <- spread(data_new, ticks_new, langval_all)
+names(data_wide)[names(data_wide) == '0'] <- 'langval_all_0'
+names(data_wide)[names(data_wide) == '1'] <- 'langval_all_1'
+names(data_wide)[names(data_wide) == '5000'] <- 'langval_all_5000'
+
+data_wide$ticks_new <- as.factor(data_wide$ticks)
+data_wide <- spread(data_wide, ticks_new, langval_control)
+names(data_wide)[names(data_wide) == '0'] <- 'langval_control_0'
+names(data_wide)[names(data_wide) == '1'] <- 'langval_control_1'
+names(data_wide)[names(data_wide) == '5000'] <- 'langval_control_5000'
+
+data_wide$ticks_new <- as.factor(data_wide$ticks)
+data_wide <- spread(data_wide, ticks_new, langval_biased)
+names(data_wide)[names(data_wide) == '0'] <- 'langval_biased_0'
+names(data_wide)[names(data_wide) == '1'] <- 'langval_biased_1'
+names(data_wide)[names(data_wide) == '5000'] <- 'langval_biased_5000'
+
+df1 <- data_wide[data_wide$ticks==1,]
+df1$ticks <- NULL
+names(df1)[names(df1) == 'het_inter'] <- 'het_inter_1'
+names(df1)[names(df1) == 'het_intra'] <- 'het_intra_1'
+df1 <- remove_empty(df1)
+df5000 <- data_wide[data_wide$ticks==5000,]
+df5000$ticks <- NULL
+names(df5000)[names(df5000) == 'het_inter'] <- 'het_inter_5000'
+names(df5000)[names(df5000) == 'het_intra'] <- 'het_intra_5000'
+df5000 <- remove_empty(df5000)
+
+df_final_wide <- merge(df1, df5000, by = c("rep_id", "prop_biased", "learners", "bias_strength", "size_net", "init_langval", "influencers_biased", "degrees", "network" ))
+
+
+
+### -------- COMPUTE STABILIZATION -------- ####
+
+# Create new columns
+df_final_wide$stab_all <- 0
+df_final_wide$stab_control <- 0
+df_final_wide$stab_biased <- 0
+
+# Loop for all replication, find the stabilization time for all, biased, and control nodes
+for (rep in df_final_wide$rep_id){
+  
+  # Choose parameters !
+  window <- 100 # choose window size
+  precision <- 10000 # choose precision (to round the value)
+  numb_of_iter <- 50 # choose number of iterations where the curve need to stay 0
+  
+  # Print and create subdataframe with only one replication
+  print(paste("Replication", rep, "out of", length(df_final_wide$rep_id), sep=" "))
+  sub_data <- data[data$rep_id==rep ,] # create subdataframe for the replication
+  
+  # Initialize variables
+  success <- c(FALSE, FALSE, FALSE)
+  previous_all <- 999 ; previous_biased <- 999 ; previous_control <- 999
+  stabilize_all <- 1 ; stabilize_control <- 1 ; stabilize_biased <- 1 
+  incr_all <- 0; incr_biased <- 0; incr_control <- 0
+
+  for (timing in 2:(nrow(sub_data)-window-1)){
+    
+    # Compute slope for ALL nodes
+    slope_all <- round(((sub_data$langval_all[sub_data$ticks==timing] - sub_data$langval_all[sub_data$ticks==(timing+window)]) / window) * precision)
+
+    # Compute slope for CONTR0L nodes (affect NA and success if there are no control nodes)
+    if (is.na(sub_data$langval_control[1]==TRUE)) { 
+      stabilize_control <- NA 
+      slope_control <- NA
+      success[2] <- TRUE
+    } else {
+      slope_control <- round(((sub_data$langval_control[sub_data$ticks==timing] - sub_data$langval_control[sub_data$ticks==(timing+window)]) / window) * precision)
+    }
+    
+    # Compute slope for BIASED nodes (affect NA and success if there are no control nodes)
+    if (is.na(sub_data$langval_biased[1]==TRUE)) { 
+      stabilize_biased <- NA
+      slope_biased <- NA
+      success[3] <- TRUE
+    } else {
+    slope_biased <- round(((sub_data$langval_biased[sub_data$ticks==timing] - sub_data$langval_biased[sub_data$ticks==(timing+window)]) / window) * precision)
+    }
+    
+    # Record stabilization and check if it stays the same for numb_of_iter iterations...
+    
+    # ... for ALL nodes
+    if (success[1] == FALSE){
+      if ((previous_all != 0) & (slope_all == 0)) { stabilize_all <- timing }
+      if (slope_all != 0) { incr_all <- 0 } else { incr_all <- incr_all + 1 }
+      if (incr_all==numb_of_iter) { success[1] <- TRUE }
+    }
+    
+    # ... for CONTROL nodes
+    if (success[2] == FALSE){
+      if ((previous_control != 0) & (slope_control == 0)) { stabilize_control <- timing }
+      if (slope_control != 0) { incr_control <- 0 } else { incr_control <- incr_control + 1 }
+      if (incr_control==numb_of_iter) { success[2] <- TRUE }
+    }
+    
+    # ... for BIASED nodes
+    if (success[3] == FALSE) {
+      if ((previous_biased != 0) & (slope_biased == 0)) { stabilize_biased <- timing }
+      if (slope_biased != 0) { incr_biased <- 0 } else { incr_biased <- incr_biased + 1 }
+      if (incr_biased==numb_of_iter) { success[3] <- TRUE }
+    }
+    
+    # affect new values to previous
+    previous_all <- slope_all ; previous_biased <- slope_biased ; previous_control <- slope_control
+
+    # Break the loop if all stabilization points are found
+    if (all(success==TRUE)){ break }
+  }
+ 
+  # record this value in the table
+  df_final_wide$stab_all[df_final_wide$rep_id==rep] <- stabilize_all
+  df_final_wide$stab_control[df_final_wide$rep_id==rep] <- stabilize_control
+  df_final_wide$stab_biased[df_final_wide$rep_id==rep] <- stabilize_biased
+
+  
+  # ## Eventually plot the result of the stabilization...
+  # p_biased <- ggplot(data=sub_data[sub_data$ticks<1000,], aes(x=ticks, y=langval_biased))+
+  #   geom_point(size=0.5) +
+  #   ylim(0,1) +
+  #   geom_vline(xintercept = stabilize_biased)
+  #
+  # p_control <- ggplot(data=sub_data[sub_data$ticks<1000,], aes(x=ticks, y=langval_control))+
+  #   geom_point(size=0.5) +
+  #   ylim(0,1) +
+  #   geom_vline(xintercept = stabilize_control)
+  # 
+  # p_all <- ggplot(data=sub_data[sub_data$ticks<1000,], aes(x=ticks, y=langval_all))+
+  #   geom_point(size=0.5) +
+  #   ylim(0,1) +
+  #   geom_vline(xintercept = stabilize_all)
+
+   
+}
+
+### ----- MERGE DEGREES INFORMATION ----- ###
+
+# merge good degrees list (recorded at tick = 0) with the final table inside a new table, df_to_print
+data2 <- data[data$ticks==0]
+data2$identif <-  apply( data2[ , c("rep_id", "prop_biased", "learners", "bias_strength", "size_net", "init_langval", "influencers_biased", "network" )], 1, paste , collapse = "-" )
+data3 <- data.frame(degrees = data2$degrees, identif = data2$identif)
+df_final_wide$identif <-  apply( df_final_wide[ , c("rep_id", "prop_biased", "learners", "bias_strength", "size_net", "init_langval", "influencers_biased", "network" )], 1, paste , collapse = "-" )
+df_final_wide$degrees <- NULL
+df_to_print <- merge(data3, df_final_wide, by=c("identif"))  
+df_to_print$identif <- NULL
+
+# clean the degrees column
+df_to_print$degrees <-  gsub("([.-])|[[:punct:]]", "\\1", df_to_print$degrees) # remove the [] at the end and beginning
+df_to_print$degrees <- trim(df_to_print$degrees) # remove white spaces at the end or beginning
+
+### -----ADD DIFF COLUMN INFORMATION ----- ###
+
+# add column with difference between groups
+df_to_print$diff_group <- df_to_print$langval_control_5000 -  df_to_print$langval_biased_5000
+
+
+### ----- WRITE TABLE ----- ###
+
+# write table
+write.csv(df_to_print, paste(pathfile, namefile, "_summarized", extension, sep=""))
+```
+
+```{r}
+# merge files together
+
+data1 <- read.csv("/home/mjosserand/Documents/Netlogo/WEEKEND/scalefree_MAP_10influ_good_summarized.csv", header=T, quote='"', fill=TRUE, row.names=1)
+data2 <- read.csv("/home/mjosserand/Documents/Netlogo/WEEKEND/scalefree_MAP_0influ_good_summarized.csv", header=T, quote='"', fill=TRUE, row.names=1)
+data3 <- read.csv("/home/mjosserand/Documents/Netlogo/WEEKEND/scalefree_SAM_10influ_good_summarized.csv", header=T, quote='"', fill=TRUE, row.names=1)
+data4 <- read.csv("/home/mjosserand/Documents/Netlogo/WEEKEND/scalefree_SAM_0influ_good_summarized.csv", header=T, quote='"', fill=TRUE, row.names=1)
+
+data_scalefree <- rbind(data1, data2, data3, data4)
+
+data_scalefree <- read.csv("/home/mjosserand/Documents/Netlogo/WEEKEND/scalefree.csv", header=T, quote='"', fill=TRUE, row.names=1)
+data_smallworld <- read.csv("/home/mjosserand/Documents/Netlogo/WEEKEND/smallworld.csv", header=T, quote='"', fill=TRUE, row.names=1)
+
+
+write.csv(data_scalefree, "/home/mjosserand/Documents/Netlogo/WEEKEND/scalefree.csv")
+
+data_random <- data_smallworld
+data_random$network <- "random"
+data_sc_sf <- rbind(data_scalefree, data_smallworld, data_random)
+write.csv(data_sc_sf, "/home/mjosserand/Documents/Netlogo/WEEKEND/first_trial.csv")
+
+```
+
